@@ -9,12 +9,18 @@ let supabase: any;
 
 try {
   if (SUPABASE_URL && SUPABASE_URL.startsWith('http') && SUPABASE_KEY) {
-    supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
+    supabase = createClient(SUPABASE_URL, SUPABASE_KEY, {
+      auth: {
+        persistSession: false
+      }
+    });
+    console.log("Supabase client initialized successfully");
   } else {
     console.error("CRITICAL ERROR: SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY is missing or invalid.");
   }
 } catch (e) {
   console.error("Failed to initialize Supabase client:", e);
+  supabase = null;
 }
 
 const STORAGE_LIMIT_MB = 45; // Virtual limit for demo purposes
@@ -110,25 +116,37 @@ const autoCleanupStorage = async () => {
 // Supabase Status check for Admin
 router.get("/supabase-status", async (req, res) => {
   try {
-    if (!supabase) {
+    if (!supabase || typeof supabase.from !== 'function') {
       return res.json({ 
         connected: false, 
-        error: "Supabase chưa được khởi tạo. Vui lòng kiểm tra SUPABASE_URL và KEY trong biến môi trường." 
+        error: "Supabase chưa được khởi tạo đúng cách. Vui lòng kiểm tra lại URL và Key." 
       });
     }
     
-    const { data, error } = await supabase.from('users').select('count', { count: 'exact', head: true });
+    // Thêm timeout cho request
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 5000);
+
+    const { data, error } = await supabase.from('users')
+      .select('count', { count: 'exact', head: true })
+      .abortSignal(controller.signal);
+    
+    clearTimeout(timeoutId);
     
     if (error) {
       return res.json({ 
         connected: false, 
-        error: `Lỗi kết nối Supabase: ${error.message} (${error.code})` 
+        error: `Lỗi từ Supabase: ${error.message}` 
       });
     }
     
     res.json({ connected: true, message: "Kết nối Supabase ổn định" });
   } catch (e: any) {
-    res.json({ connected: false, error: `Lỗi hệ thống: ${e.message}` });
+    console.error("Status check error:", e);
+    res.json({ 
+      connected: false, 
+      error: e.name === 'AbortError' ? "Kết nối tới Supabase bị quá hạn (Timeout)" : `Lỗi hệ thống: ${e.message}` 
+    });
   }
 });
 
