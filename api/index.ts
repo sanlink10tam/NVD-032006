@@ -1,3 +1,4 @@
+console.log("Loading api/index.ts...");
 import express from "express";
 import cors from "cors";
 import { createClient } from "@supabase/supabase-js";
@@ -158,9 +159,10 @@ router.get("/data", checkSupabase, async (req, res) => {
     const { data: notifications } = await supabase.from('notifications').select('*');
     const { data: config } = await supabase.from('config').select('*');
 
-    const budget = config?.find(c => c.key === 'budget')?.value || 30000000;
-    const rankProfit = config?.find(c => c.key === 'rankProfit')?.value || 0;
-    const loanProfit = config?.find(c => c.key === 'loanProfit')?.value || 0;
+    const configList = Array.isArray(config) ? config : [];
+    const budget = configList.find((c: any) => c.key === 'budget')?.value || 30000000;
+    const rankProfit = configList.find((c: any) => c.key === 'rankProfit')?.value || 0;
+    const loanProfit = configList.find((c: any) => c.key === 'loanProfit')?.value || 0;
 
     const payload = {
       users: users || [],
