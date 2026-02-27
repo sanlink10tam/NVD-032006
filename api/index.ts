@@ -5,11 +5,17 @@ import { createClient } from "@supabase/supabase-js";
 const SUPABASE_URL = process.env.SUPABASE_URL || "";
 const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY || "";
 
-if (!SUPABASE_URL || !SUPABASE_KEY) {
-  console.error("CRITICAL ERROR: SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY is missing from environment variables.");
-}
+let supabase: any;
 
-const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
+try {
+  if (SUPABASE_URL && SUPABASE_URL.startsWith('http') && SUPABASE_KEY) {
+    supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
+  } else {
+    console.error("CRITICAL ERROR: SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY is missing or invalid.");
+  }
+} catch (e) {
+  console.error("Failed to initialize Supabase client:", e);
+}
 
 const STORAGE_LIMIT_MB = 45; // Virtual limit for demo purposes
 
@@ -17,6 +23,14 @@ const router = express.Router();
 
 router.use(cors());
 router.use(express.json({ limit: '50mb' }));
+
+// Middleware to check if Supabase is initialized
+const checkSupabase = (req: express.Request, res: express.Response, next: express.NextFunction) => {
+  if (!supabase) {
+    return res.status(503).json({ error: "Dịch vụ cơ sở dữ liệu chưa sẵn sàng. Vui lòng kiểm tra cấu hình Supabase." });
+  }
+  next();
+};
 
 // Helper to estimate JSON size in MB
 const getStorageUsage = (data: any) => {
@@ -96,10 +110,10 @@ const autoCleanupStorage = async () => {
 // Supabase Status check for Admin
 router.get("/supabase-status", async (req, res) => {
   try {
-    if (!SUPABASE_URL || !SUPABASE_KEY) {
+    if (!supabase) {
       return res.json({ 
         connected: false, 
-        error: "Thiếu cấu hình SUPABASE_URL hoặc SUPABASE_SERVICE_ROLE_KEY" 
+        error: "Supabase chưa được khởi tạo. Vui lòng kiểm tra SUPABASE_URL và KEY trong biến môi trường." 
       });
     }
     
@@ -119,7 +133,7 @@ router.get("/supabase-status", async (req, res) => {
 });
 
 // API Routes
-router.get("/data", async (req, res) => {
+router.get("/data", checkSupabase, async (req, res) => {
   try {
     const { data: users } = await supabase.from('users').select('*');
     const { data: loans } = await supabase.from('loans').select('*');
@@ -158,7 +172,7 @@ router.get("/data", async (req, res) => {
   }
 });
 
-router.post("/users", async (req, res) => {
+router.post("/users", checkSupabase, async (req, res) => {
   try {
     const incomingUsers = req.body;
     if (!Array.isArray(incomingUsers)) {
@@ -176,7 +190,7 @@ router.post("/users", async (req, res) => {
   }
 });
 
-router.post("/loans", async (req, res) => {
+router.post("/loans", checkSupabase, async (req, res) => {
   try {
     const incomingLoans = req.body;
     if (!Array.isArray(incomingLoans)) {
@@ -194,7 +208,7 @@ router.post("/loans", async (req, res) => {
   }
 });
 
-router.post("/notifications", async (req, res) => {
+router.post("/notifications", checkSupabase, async (req, res) => {
   try {
     const incomingNotifs = req.body;
     if (!Array.isArray(incomingNotifs)) {
@@ -212,7 +226,7 @@ router.post("/notifications", async (req, res) => {
   }
 });
 
-router.post("/budget", async (req, res) => {
+router.post("/budget", checkSupabase, async (req, res) => {
   try {
     const { budget } = req.body;
     await supabase.from('config').upsert({ key: 'budget', value: budget }, { onConflict: 'key' });
@@ -222,7 +236,7 @@ router.post("/budget", async (req, res) => {
   }
 });
 
-router.post("/rankProfit", async (req, res) => {
+router.post("/rankProfit", checkSupabase, async (req, res) => {
   try {
     const { rankProfit } = req.body;
     await supabase.from('config').upsert({ key: 'rankProfit', value: rankProfit }, { onConflict: 'key' });
@@ -232,7 +246,7 @@ router.post("/rankProfit", async (req, res) => {
   }
 });
 
-router.post("/loanProfit", async (req, res) => {
+router.post("/loanProfit", checkSupabase, async (req, res) => {
   try {
     const { loanProfit } = req.body;
     await supabase.from('config').upsert({ key: 'loanProfit', value: loanProfit }, { onConflict: 'key' });
@@ -242,7 +256,7 @@ router.post("/loanProfit", async (req, res) => {
   }
 });
 
-router.delete("/users/:id", async (req, res) => {
+router.delete("/users/:id", checkSupabase, async (req, res) => {
   try {
     const userId = req.params.id;
     await supabase.from('users').delete().eq('id', userId);
@@ -254,7 +268,7 @@ router.delete("/users/:id", async (req, res) => {
   }
 });
 
-router.post("/sync", async (req, res) => {
+router.post("/sync", checkSupabase, async (req, res) => {
   try {
     const { users, loans, notifications, budget, rankProfit, loanProfit } = req.body;
     
