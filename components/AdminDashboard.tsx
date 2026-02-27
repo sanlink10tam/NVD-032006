@@ -51,9 +51,14 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
     setIsCheckingDb(true);
     try {
       const response = await fetch('/api/supabase-status');
+      if (!response.ok) {
+        const text = await response.text();
+        throw new Error(`Server error (${response.status}): ${text.slice(0, 50)}`);
+      }
       const data = await response.json();
       setDbStatus(data);
     } catch (e: any) {
+      console.error("Database status check failed:", e);
       setDbStatus({ connected: false, error: `Lỗi kết nối API: ${e.message}` });
     } finally {
       setIsCheckingDb(false);
